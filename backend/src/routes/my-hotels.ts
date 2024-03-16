@@ -1,7 +1,8 @@
 import express, { Request, Response } from "express";
 import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
-import Hotel, { HotelType } from "../models/hotel";
+import Hotel from "../models/hotel";
+import { HotelType } from "../shared/types";
 import verifyToken from "../middleware/auth";
 import { body } from "express-validator";
 
@@ -75,4 +76,59 @@ const uploadImages = async (imageFiles: Express.Multer.File[]) => {
   return imageUrls;
 };
 
+router.get("/", verifyToken, async (req: Request, res: Response) => {
+  try {
+    const hotels = await Hotel.find({ userId: req.userId });
+    res.status(200).json(hotels);
+  } catch (error) {
+    res.status(500).json({ message: "Error Fetching Hotel" });
+  }
+});
+
+router.get("/:id", verifyToken, async (req: Request, res: Response) => {
+  const id = req.params.id.toString();
+  try {
+    const hotel = await Hotel.findOne({
+      _id: id,
+      userId: req.userId,
+    });
+    if (!hotel) {
+      return res.status(404).json({ message: "Hotel Not Found" });
+    }
+    res.status(200).json(hotel);
+  } catch (error) {
+    res.status(500).json({ message: "Error Fetching Hotel" });
+  }
+});
+
+//update hotel
+router.put(
+  "/:hotelId",
+  verifyToken,
+  upload.array("imageFiles", 6),
+  async (req: Request, res: Response) => {
+    try {
+      const updatedHotel: HotelType = req.body;
+      const hotel = await Hotel.findOneAndUpdate(
+        {
+          _id: req.params.hotelId,
+          userId: req.userId,
+        },
+        updatedHotel,
+        { new: true }
+      );
+      if (!hotel) {
+        return res.status(404).json({ message: "Hotel not found" });
+      }
+      const files = req.files as Express.Multer.File[];
+      const updatedImageUrls = await uploadImages(files);
+      hotel.imageUrls = [...updatedImageUrls, ...(hotel.imageUrls || [])];
+      hotel.lastUpdated = new Date();
+      await hotel.save();
+      return res.status(200).json(hotel);
+    } catch (error) {
+      res.status(500).json({ message: "Something went wrong" });
+    }
+  }
+);
 export default router;
